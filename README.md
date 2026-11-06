@@ -4,8 +4,13 @@ Repository for storing prompts and prompt templates.
 
 ## 提示词 / Prompts
 
+- [super-agent-amp-prompt.md](super-agent-amp-prompt.md) — 用 Amp 实现 super-agent 最小版（Grok headless 多任务 + Web GUI）的执行提示词
 - [ws-setup-amp-prompt.md](ws-setup-amp-prompt.md) — 搭建多 repo agent workspace（ws）+ 专做逆向规格的 spec-miner agent
 - [second-brain-setup-prompt.md](second-brain-setup-prompt.md) — second brain 初始化提示词
+
+## 规格 / Specs
+
+- [super-agent-impl-spec.md](super-agent-impl-spec.md) — Super-agent 最小版实现规格：任务隔离、clone 策略、状态机、Watchdog、权限边界与验收清单
 
 ## 用例 / Use Cases
 
