@@ -6,6 +6,7 @@ Repository for storing prompts and prompt templates.
 
 - [super-agent-amp-prompt.md](super-agent-amp-prompt.md) — 用 Amp 实现 super-agent 最小版（Grok headless 多任务 + Web GUI）的执行提示词
 - [specgate-amp-prompt.md](specgate-amp-prompt.md) — 用编码 agent 实现 SpecGate 的分阶段执行提示词（先硬化事实，再 DB/lint/闭环/流水线/GUI，附 15 项真跑验收）
+- [specgate-spec-authoring-prompt.md](specgate-spec-authoring-prompt.md) — 用 agent 起草功能 spec 并导入 SpecGate 的提示词（EARS 句式、三值权威判定、自检循环、导入与冲突处理）
 - [ws-setup-amp-prompt.md](ws-setup-amp-prompt.md) — 搭建多 repo agent workspace（ws）+ 专做逆向规格的 spec-miner agent
 - [second-brain-setup-prompt.md](second-brain-setup-prompt.md) — second brain 初始化提示词
 

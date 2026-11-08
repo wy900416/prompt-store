@@ -102,6 +102,7 @@ CREATE TABLE rule (
   tradeoff        TEXT,              -- internal 建议填：取舍 + 代价
   verified_at     TEXT,              -- assumed 验证时间
   verified_by     TEXT,
+  verify_hint     TEXT,              -- assumed 专用：怎么验证（具体命令/文件/URL），界面的「去验证」显示它
   status          TEXT NOT NULL,     -- draft|approved|deprecated
   rev             INTEGER NOT NULL,  -- 每次内容变更 +1
   approved_hash   TEXT,              -- 批准时 statement+scenarios 的 sha256
@@ -225,7 +226,7 @@ CREATE INDEX idx_event_run ON event(run_id, id);
 |---|---|---|---|---|
 | `external` | 法规、上游 API 契约、平台限制、硬件现实、客户书面要求 | **"我对它的理解是否正确"**，不是"我同意" | `[引用无误] [引用有误] [来源已变更]` + 可点出处 | 无 `source_url`；agent 自己写了 `external` 却没出处 → **直接判 `found` 为伪造，blocking** |
 | `internal` | 我方决策：选的行为、取舍、容错策略 | "我批准这个决策" | `[approve] [修改] [驳回]` | 无（缺 `tradeoff` 是 warning） |
-| `assumed` | agent 对现状或外部世界的推断（如"现有对账任务每日 02:00 运行"） | 不允许批准，只能处置 | `[去验证] [降级为 known-drift] [升级为 reference]` | 任何 `assumed` 处于未处置状态 → 该 rule 不能批准，其所在 change 不能放行 |
+| `assumed` | agent 对现状或外部世界的推断（如"现有对账任务每日 02:00 运行"） | 不允许批准，只能处置 | `[去验证] [降级为 known-drift] [升级为 reference]`；「去验证」必须显示 `verify_hint`（具体命令 / 文件 / URL） | 任何 `assumed` 处于未处置状态 → 该 rule 不能批准，其所在 change 不能放行 |
 
 **external 必须拆成 claim + obligation**：
 
@@ -397,6 +398,7 @@ GET  /api/runs                             列表；GET /api/runs/{id}/events �
 POST /api/runs/{id}/abort
 POST /api/gate/evaluate                    {spec,change} → {allow_merge, reasons[]}
 GET  /api/export/{spec}                    markdown 快照
+POST /api/import                         批量导入 spec（见 §18 导入契约），幂等
 ```
 
 错误约定：闸门类拒绝统一返回 `409` + `{"reasons":[...]}`，前端直接渲染在闸门条上。
@@ -432,6 +434,7 @@ GET  /api/export/{spec}                    markdown 快照
 - **drift 巡检**：定时从代码反挖实际行为，与已批准 spec 比对，产出违规清单。
 - 多 repo 单 change 的原子分支与合并策略。
 - 外部来源自动抓取复校（`source_hash` 漂移自动开 change）。
+- **delta 导入**：带 `op=added/modified/removed` 的增量导入格式，让 agent 能直接起草变更提案而不是全量重导入（第一版靠"人在评审台改"过渡）。
 
 ## 17. 验收清单（必须真跑，输出贴回，不允许"已实现"式claim）
 
@@ -450,3 +453,59 @@ GET  /api/export/{spec}                    markdown 快照
 13. change 含 16 条规范性 rule → `L-TOO-MANY` 出现；"需你判断"超过 8 张 → 黄色提示条出现。
 14. 前端：`python -m specgate smoke` 抓取 5 个视图并断言关键 `data-testid` 存在且 blocking 未清时提交按钮为 `disabled`。
 15. `specgate export` 产出的 markdown 能完整重建回 DB（export → 新库 import → rule 集合与 scenario 一致）。
+16. 导入契约（§18）：`specgate import fixtures/spec-import-sample.json` 成功导入并返回 lint 计数；**同一文件重复导入第二次 = 0 条变更**（幂等）；把文件里一条**仍是 draft** 的 rule 内容改掉再导入 → 成功且该 rule `rev+1`；把一条**已批准**的 rule 改掉再导入 → `409` 并列出冲突的 `local_id`，不静默覆盖。
+
+## 18. 导入契约（agent 起草 spec 的唯一入口）
+
+外部（agent 起草器、人写、CI）向系统灌 spec，只有这一种格式。实现者必须让 `POST /api/import` 与 `specgate import <file.json>` 行为完全一致。
+
+### 18.1 文件格式
+
+```json
+{
+  "spec": {
+    "id": "order-reservation",
+    "title": "订单库存预占",
+    "intent": "为防止超卖，下单时先预占库存，支付成功再扣减。成功标准：超卖为 0。",
+    "non_goals": ["不做跨仓调拨", "不处理预售商品"],
+    "glossary": [
+      {"term": "预占", "def": "在库存上占用数量但尚未扣减，可回滚"}
+    ]
+  },
+  "change": {
+    "id": "order-reservation-v1",
+    "title": "初始 spec",
+    "why": "第一版库存预占规则"
+  },
+  "rules": [
+    {
+      "local_id": "R1",
+      "kind": "unwanted",
+      "authority": "internal",
+      "class": "behavior",
+      "statement": "若可用库存不足，则系统应拒绝创建订单并返回 409、code=OUT_OF_STOCK。",
+      "obligation": null,
+      "source_url": null,
+      "tradeoff": "预占需要额外一张表与清理任务，换取不超卖",
+      "verify_hint": null,
+      "scenarios": [
+        {"kind": "failure", "given": "商品可用库存为 0", "when": "提交下单请求", "then": "返回 409 且不创建订单记录"}
+      ]
+    }
+  ]
+}
+```
+
+### 18.2 语义
+
+- 全部 rule 以 `status=draft` 落库，`rev=1`，写一行 `rule_rev(op=create, by_=agent|human, why=change.why)`。
+- `change` 存在时：创建 `state=open` 的 change，`assemble` 出全部 `op=added` / `semantic=material` 的 entry；`change.why` 为空则整份导入被拒（400）。
+- `change` 省略时：只建 spec 与 rules，不建 change（用于纯录入）。
+- **导入即跑 lint**，findings 落库。blocking 存在**不阻止导入**（数据要落得下来），但阻止该 rule 被批准、阻止 change 放行。
+- 幂等键：`(spec.id, rule.local_id)`，三种情形：
+  1. 不存在 → 创建（`rev=1`, `op=create`）
+  2. 存在，且 `status=draft` 且未被任何 `change_entry` 决策过 → **允许覆盖**（`rev+1`, `op=modify`, `by_=agent`, `why` 写明"重导入"）。这条让 agent 的"起草 → 导入 → 读 lint → 修 → 再导入"能闭环。
+  3. 存在且已批准（有 `approved_hash`）或已有人工决策 → 整份导入**失败** `409`，列出冲突的 `local_id` 与差异字段，绝不静默覆盖。此时变更必须走 change 流程（人在评审台改），而不是重导入。
+- 返回体：`{"spec_id": "...", "imported_rules": n, "skipped_rules": n, "change_id": "...|null", "lint": {"blocking": n, "warning": n, "findings": [...]}}`。
+- 该导入路径同样受 §7 的 authority 约束：`authority=external` 而无 `source_url` → `L-NO-SOURCE` blocking。
+
