@@ -10,6 +10,10 @@ Repository for storing prompts and prompt templates.
 - [ws-setup-amp-prompt.md](ws-setup-amp-prompt.md) — 搭建多 repo agent workspace（ws）+ 专做逆向规格的 spec-miner agent
 - [second-brain-setup-prompt.md](second-brain-setup-prompt.md) — second brain 初始化提示词
 
+## Copilot CLI 定制 / Copilot CLI Customization
+
+- [copilot-cli/](copilot-cli/README.md) — GitHub Copilot CLI 定制包：4 个 custom agent（spec-miner 规格逆向 / ws-scout 跨仓定位 / reviewer 变更评审 / fixer 修到绿）+ 3 个 skill（spec-review-rubric / session-handoff / minimal-diff），附权限降噪配置配方
+
 ## 规格 / Specs
 
 - [super-agent-impl-spec.md](super-agent-impl-spec.md) — Super-agent 最小版实现规格：任务隔离、clone 策略、状态机、Watchdog、权限边界与验收清单
